@@ -1,0 +1,185 @@
+import pygame, sys
+import numpy as np
+
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+GREEN = (50, 150, 50)
+PURPLE = (130, 0, 130)
+
+BACKGROUND = WHITE
+
+class Dot(pygame.sprite.Sprite):
+    def __init__(self,
+                 x,
+                 y,
+                 width,
+                 height,
+                 color=BLACK,
+                 radius=5,
+                 velocity=[0, 0],
+                 randomize = False
+                 ):
+
+        super().__init__()
+        self.image = pygame.Surface([radius * 2, radius * 2])
+        self.image.fill(BACKGROUND)
+        pygame.draw.circle(self.image, color, (radius, radius), radius)
+
+        self.rect = self.image.get_rect()
+        self.pos = np.array([x, y], dtype=np.float64)
+        self.vel = np.asarray(velocity, dtype=np.float64)
+
+        self.killswitch_on = False
+        self.recovered = False
+        self.randomize = randomize
+
+        self.WIDTH = width
+        self.HEIGHT = height
+
+    def update(self):
+        self.pos += self.vel
+        x, y = self.pos
+
+
+        # Rebotes y como estos funcionan
+        if x < 0:
+            self.pos[0] = self.WIDTH
+            x = self.WIDTH
+        if x > self.WIDTH:
+            self.pos[0] = self.WIDTH
+            x = 0
+        if y < 0:
+            self.pos[1] = self.HEIGHT
+            y = self.HEIGHT
+        if y > self.HEIGHT:
+            self.pos[1] = 0
+            y = 0
+
+        self.rect.x = x
+        self.rect.y = y
+
+        vel_norm = np.linalg.norm(self.vel)
+        if vel_norm > 3:
+            self.vel /= vel_norm
+
+        if self.randomize:
+            self.vel += np.random.rand(2) * 2 - 1
+
+        if self.killswitch_on:
+            self.cycles_to_fate -= 1
+            if self.cycles_to_fate <= 0:
+                self.killswitch_on = False
+                some_number = np.random.rand()
+                if self.mortality_rate > some_number:
+                    self.kill()
+                else:
+                    self.recovered = True
+
+    def respawn (self, color, radius=5):
+        return Dot(
+            self.rect.x,
+            self.rect.y,
+            self.WIDTH,
+            self.HEIGHT,
+            color=color,
+            velocity=self.vel,
+        )
+
+    def killswitch(self, cycles_to_fate=20, mortality_rate=0.2):
+        self.killswitch_on = True
+        self.cycles_to_fate = cycles_to_fate
+        self.mortality_rate = mortality_rate
+
+
+class Simulation:
+    def __init__(self, width=600, height=480):
+        self.WIDTH = width
+        self.HEIGHT = height
+
+        self.susceptible_container = pygame.sprite.Group()
+        self.infected_container = pygame.sprite.Group()
+        self.recovered_container = pygame.sprite.Group()
+        self.all_container = pygame.sprite.Group()
+
+        self.n_susceptible = 20
+        self.n_infected = 1
+        self.T = 1000
+        self.cycles_to_fate = 20
+        self.mortality_rate =0.2
+
+    # Inicializar el juego
+    def start(self, randomize=False):
+        self.N = self.n_susceptible + self.n_infected
+
+        pygame.init()
+        screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+
+        for i in range(self.n_susceptible):
+            x = np.random.randint(0, self.WIDTH + 1)
+            y =np.random.randint(0, self.HEIGHT + 1)
+            vel = (np.random.rand(2) * 2 - 1).tolist()
+            guy = Dot(x, y, self.WIDTH, self.HEIGHT, color = BLUE, velocity = vel, randomize=randomize,)
+            self.susceptible_container.add(guy)
+            self.all_container.add(guy)
+
+        for i in range(self.n_infected):
+            x = np.random.randint(0, self.WIDTH + 1)
+            y =np.random.randint(0, self.HEIGHT + 1)
+            vel = (np.random.rand(2) * 2 - 1).tolist()
+            guy = Dot(x, y, self.WIDTH, self.HEIGHT, color = GREEN, velocity = vel, randomize=randomize,)
+            self.infected_container.add(guy)
+            self.all_container.add(guy)
+
+        clock = pygame.time.Clock()
+
+        for i in range(self.T):
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    sys.exit()
+
+            self.all_container.update()
+
+            screen.fill(BACKGROUND)
+
+            # Nuevas infecciones
+            collision_group = pygame.sprite.groupcollide(
+                self.susceptible_container,
+                self.infected_container,
+                True,
+                False,
+            )
+            for guy in collision_group:
+                new_guy = guy.respawn(GREEN)
+                new_guy.vel *= -1
+                new_guy.killswitch(
+                    self.cycles_to_fate, self.mortality_rate
+                )
+                self.infected_container.add(new_guy)
+                self.all_container.add(new_guy)
+
+            # Recuperaciones
+            recovered = []
+            for guy in self.infected_container:
+                if guy.recovered:
+                    new_guy = guy.respawn(PURPLE)
+                    self.recovered_container.add(new_guy)
+                    self.all_container.add(new_guy)
+                    recovered.append(guy)
+            if len(recovered) > 0:
+                self.infected_container.remove(*recovered)
+                self.all_container.remove(*recovered)
+
+            self.all_container.draw(screen)
+            pygame.display.flip()
+
+            clock.tick(30)
+        pygame.quit()
+
+if __name__ == "__main__":
+    covid = Simulation()
+    covid.n_susceptible = 100
+    covid.n_infected = 5
+    covid.cycles_to_fate = 200
+    covid.start(randomize=True)
