@@ -7,6 +7,8 @@ WHITE = (255, 255, 255)
 BLUE = (0, 0, 255)
 GREEN = (50, 150, 50)
 PURPLE = (130, 0, 130)
+GREY = (230, 230, 230)
+HORRYBLE_YELLOW = (190, 175, 50)
 
 BACKGROUND = WHITE
 
@@ -105,13 +107,14 @@ class Simulation:
 
         self.n_susceptible = 20
         self.n_infected = 1
+        self.n_quarantined = 0
         self.T = 1000
         self.cycles_to_fate = 20
         self.mortality_rate =0.2
 
     # Inicializar el juego
     def start(self, randomize=False):
-        self.N = self.n_susceptible + self.n_infected
+        self.N = self.n_susceptible + self.n_infected + self.n_quarantined
 
         pygame.init()
         screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
@@ -124,6 +127,14 @@ class Simulation:
             self.susceptible_container.add(guy)
             self.all_container.add(guy)
 
+        for i in range(self.n_quarantined):
+            x = np.random.randint(0, self.WIDTH + 1)
+            y =np.random.randint(0, self.HEIGHT + 1)
+            vel = [0, 0]
+            guy = Dot(x, y, self.WIDTH, self.HEIGHT, color = BLUE, velocity = vel, randomize=False,)
+            self.susceptible_container.add(guy)
+            self.all_container.add(guy)
+
         for i in range(self.n_infected):
             x = np.random.randint(0, self.WIDTH + 1)
             y =np.random.randint(0, self.HEIGHT + 1)
@@ -131,6 +142,13 @@ class Simulation:
             guy = Dot(x, y, self.WIDTH, self.HEIGHT, color = GREEN, velocity = vel, randomize=randomize,)
             self.infected_container.add(guy)
             self.all_container.add(guy)
+
+        stats = pygame.Surface(
+            (self.WIDTH // 4, self.HEIGHT // 4)
+        )
+        stats.fill(GREY)
+        stats.set_alpha(230)
+        stats_pos = (self.WIDTH // 40, self.HEIGHT // 40)
 
         clock = pygame.time.Clock()
 
@@ -142,6 +160,31 @@ class Simulation:
             self.all_container.update()
 
             screen.fill(BACKGROUND)
+
+            # Actualizar estadisticas
+            stats_height = stats.get_height()
+            stats_width = stats.get_width()
+            n_inf_now = len(self.infected_container)
+            n_pop_now = len(self.all_container)
+            n_rec_now = len(self.recovered_container)
+            t = int((i / self.T) * stats_width)
+            y_infect = int(
+                stats_height - (n_inf_now / n_pop_now) * stats_height
+            )
+            y_dead = int(
+                ((self.N - n_pop_now) / self.N) * stats_height
+            )
+            y_recovered = int(
+                (n_rec_now / n_pop_now) * stats_height
+            )
+            stats_graph = pygame.PixelArray(stats)
+            stats_graph[t, y_infect:] = pygame.Color(*GREEN)
+            stats_graph[t, :y_dead] = pygame.Color(
+                *HORRYBLE_YELLOW
+            )
+            stats_graph[t, y_dead:y_dead + y_recovered] = pygame.Color(
+                *PURPLE
+            )
 
             # Nuevas infecciones
             collision_group = pygame.sprite.groupcollide(
@@ -172,6 +215,10 @@ class Simulation:
                 self.all_container.remove(*recovered)
 
             self.all_container.draw(screen)
+
+            del stats_graph
+            stats.unlock()
+            screen.blit(stats, stats_pos)
             pygame.display.flip()
 
             clock.tick(30)
@@ -179,7 +226,9 @@ class Simulation:
 
 if __name__ == "__main__":
     covid = Simulation()
-    covid.n_susceptible = 100
-    covid.n_infected = 5
+    covid.n_susceptible = 40
+    covid.n_quarantined = 70
+    covid.n_infected = 2
     covid.cycles_to_fate = 200
+    covid.mortality_rate = 0.3
     covid.start(randomize=True)
