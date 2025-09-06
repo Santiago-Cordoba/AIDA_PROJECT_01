@@ -1,6 +1,7 @@
 import pygame, sys
 import numpy as np
 import matplotlib
+
 matplotlib.use("Agg")  # Backend sin ventana
 import matplotlib.pyplot as plt
 from io import BytesIO
@@ -15,7 +16,8 @@ HORRYBLE_YELLOW = (190, 175, 50)
 VACCINE_COLOR = (200, 200, 255)
 VACCINE_CENTER_COLOR = (255, 255, 255)
 ORANGE = (255, 165, 0)
-
+LIGHT_BLUE = (173, 216, 230)
+DARK_GREY = (64, 64, 64)
 
 BACKGROUND = WHITE
 
@@ -205,6 +207,7 @@ class Simulation:
         self.n_susceptible = 45
         self.n_infected = 5
         self.n_quarantined = 0
+        self.n_vaccinated = 0
 
         # Parámetros de enfermedad
         self.T = 1000
@@ -214,7 +217,7 @@ class Simulation:
         self.recovery_period_max = 250
         self.mortality_rate = 0.3
 
-        #Centro de vacunación
+        # Centro de vacunación
         self.vaccine_center = pygame.Rect(20, self.HEIGHT - 120, 100, 100)
         self.vaccination_rate = 0.8
 
@@ -225,13 +228,12 @@ class Simulation:
         self.history_susceptible = []
 
     def start(self, randomize=False):
-        self.N = self.n_susceptible + self.n_infected + self.n_quarantined
+        self.N = self.n_susceptible + self.n_infected + self.n_quarantined + self.n_vaccinated
 
         pygame.init()
         EXTRA_WIDTH = 450
         screen = pygame.display.set_mode((self.WIDTH + EXTRA_WIDTH, self.HEIGHT))
-        pygame.display.set_caption("Desease Simulator")
-
+        pygame.display.set_caption("Disease Simulator")
 
         # Crear población susceptible
         for i in range(self.n_susceptible):
@@ -257,6 +259,19 @@ class Simulation:
             guy.simulation = self
             guy.vaccinated = False
             self.susceptible_container.add(guy)
+            self.all_container.add(guy)
+
+        # Crear población vacunada inicial
+        for i in range(self.n_vaccinated):
+            x = np.random.randint(0, self.WIDTH + 1)
+            y = np.random.randint(0, self.HEIGHT + 1)
+            vel = (np.random.rand(2) * 2 - 1).tolist()
+            age = np.random.randint(1, 100)
+            guy = Dot(x, y, self.WIDTH, self.HEIGHT, color=VACCINE_COLOR, velocity=vel,
+                      randomize=randomize, age=age, health_status="vaccinated")
+            guy.simulation = self
+            guy.vaccinated = True
+            self.vaccinated_container.add(guy)
             self.all_container.add(guy)
 
         # Crear población infectada inicial
@@ -290,8 +305,6 @@ class Simulation:
         except:
             font = pygame.font.SysFont(None, 24)
 
-
-
         clock = pygame.time.Clock()
         running = True
         i = 0
@@ -315,7 +328,7 @@ class Simulation:
                 text = font.render("⚕", True, BLACK)
                 screen.blit(text, (self.vaccine_center.centerx - 6, self.vaccine_center.centery - 12))
 
-                #Incrementar el numero de dias
+                # Incrementar el numero de dias
                 if i % self.cycles_per_day == 0:
                     self.current_day += 1
 
@@ -344,7 +357,7 @@ class Simulation:
                 plt.plot(self.history_recovered, color="purple", label="Recuperados")
                 plt.plot(self.history_vaccinated, color="blue", label="Vacunados")
                 plt.plot(self.history_dead, color="orange", label="Muertos")
-                plt.plot(self.history_susceptible, color="black", label="Susceptibles")
+                plt.plot(self.history_susceptible, color="red", label="Susceptibles")
                 plt.xlabel("Días")
                 plt.ylabel("Número de personas")
                 plt.legend(fontsize=6)
@@ -421,20 +434,24 @@ class Simulation:
 
         pygame.quit()
 
+
 class InputBox:
-    def __init__(self, x, y, w, h, text=''):
+    def __init__(self, x, y, w, h, text='', placeholder=''):
         self.rect = pygame.Rect(x, y, w, h)
-        self.color_inactive = pygame.Color('lightskyblue3')
-        self.color_active = pygame.Color('dodgerblue2')
+        self.color_inactive = pygame.Color(200, 200, 200)
+        self.color_active = pygame.Color(100, 150, 255)
+        self.color_border = pygame.Color(150, 150, 150)
         self.color = self.color_inactive
         self.text = text
-        self.font = pygame.font.SysFont("Arial", 24)
-        self.txt_surface = self.font.render(text, True, self.color)
+        self.placeholder = placeholder
+        self.font = pygame.font.SysFont("Arial", 20)
+        self.txt_surface = self.font.render(text, True, BLACK)
         self.active = False
+        self.cursor_visible = True
+        self.cursor_counter = 0
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
-            # Si clic dentro del input → activar
             if self.rect.collidepoint(event.pos):
                 self.active = not self.active
             else:
@@ -448,73 +465,258 @@ class InputBox:
                 elif event.key == pygame.K_BACKSPACE:
                     self.text = self.text[:-1]
                 else:
-                    if event.unicode.isdigit():
+                    if event.unicode.isdigit() and len(self.text) < 6:
                         self.text += event.unicode
                 self.txt_surface = self.font.render(self.text, True, BLACK)
 
         return None
 
     def draw(self, screen):
-        # Renderizar texto
-        screen.blit(self.txt_surface, (self.rect.x+5, self.rect.y+5))
-        pygame.draw.rect(screen, self.color, self.rect, 2)
+        # Cursor parpadeante
+        self.cursor_counter += 1
+        if self.cursor_counter >= 30:
+            self.cursor_visible = not self.cursor_visible
+            self.cursor_counter = 0
 
+        # Fondo del input
+        pygame.draw.rect(screen, WHITE, self.rect)
+        pygame.draw.rect(screen, self.color_border, self.rect, 2)
+
+        if self.active:
+            pygame.draw.rect(screen, self.color_active, self.rect, 3)
+
+        # Texto o placeholder
+        if self.text:
+            screen.blit(self.txt_surface, (self.rect.x + 10, self.rect.y + 10))
+        else:
+            placeholder_surface = self.font.render(self.placeholder, True, (150, 150, 150))
+            screen.blit(placeholder_surface, (self.rect.x + 10, self.rect.y + 10))
+
+        # Cursor
+        if self.active and self.cursor_visible and self.text:
+            cursor_x = self.rect.x + 10 + self.txt_surface.get_width()
+            pygame.draw.line(screen, BLACK, (cursor_x, self.rect.y + 5), (cursor_x, self.rect.y + self.rect.height - 5),
+                             2)
+
+
+def draw_gradient_rect(screen, color1, color2, rect):
+    """Dibuja un rectángulo con gradiente vertical"""
+    for y in range(rect.height):
+        blend = y / rect.height
+        r = int(color1[0] * (1 - blend) + color2[0] * blend)
+        g = int(color1[1] * (1 - blend) + color2[1] * blend)
+        b = int(color1[2] * (1 - blend) + color2[2] * blend)
+        pygame.draw.line(screen, (r, g, b), (rect.x, rect.y + y), (rect.x + rect.width, rect.y + y))
+
+
+def draw_button(screen, rect, text, font, base_color, hover_color, is_hovered=False):
+    """Dibuja un botón con efecto hover y gradiente"""
+    color = hover_color if is_hovered else base_color
+
+    # Gradiente para el botón
+    lighter = tuple(min(255, c + 30) for c in color)
+    darker = tuple(max(0, c - 30) for c in color)
+    draw_gradient_rect(screen, lighter, darker, rect)
+
+    # Borde
+    pygame.draw.rect(screen, (100, 100, 100), rect, 2)
+
+    # Texto centrado
+    text_surface = font.render(text, True, WHITE)
+    text_rect = text_surface.get_rect(center=rect.center)
+    screen.blit(text_surface, text_rect)
 
 
 if __name__ == "__main__":
     pygame.init()
-    screen = pygame.display.set_mode((600, 400))
-    pygame.display.set_caption("Configuración de la simulación")
-    font = pygame.font.SysFont("Arial", 28)
 
-    input_total = InputBox(250, 100, 140, 40)
-    input_infectados = InputBox(250, 180, 140, 40)
-    input_boxes = [input_total, input_infectados]
+    # Configuración de la ventana
+    WINDOW_WIDTH = 800
+    WINDOW_HEIGHT = 600
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("Configuración del Simulador de Pandemia")
 
-    button_rect = pygame.Rect(200, 280, 200, 50)
+    # Fuentes
+    title_font = pygame.font.SysFont("Arial", 36, bold=True)
+    font = pygame.font.SysFont("Arial", 24)
+    label_font = pygame.font.SysFont("Arial", 20)
+
+    # Colores
+    BACKGROUND_COLOR = (240, 248, 255)  # Alice Blue
+    HEADER_COLOR = (70, 130, 180)  # Steel Blue
+    SECTION_COLOR = (245, 245, 245)  # WhiteSmoke
+
+    # Crear input boxes con placeholders
+    input_boxes = {
+        'total': InputBox(400, 180, 180, 40, placeholder="Ej: 100"),
+        'infectados': InputBox(400, 240, 180, 40, placeholder="Ej: 5"),
+        'vacunados': InputBox(400, 300, 180, 40, placeholder="Ej: 10"),
+        'cuarentena': InputBox(400, 360, 180, 40, placeholder="Ej: 0")
+    }
+
+    # Configuración del botón
+    button_rect = pygame.Rect(300, 460, 200, 50)
+    reset_button_rect = pygame.Rect(520, 460, 120, 50)
+
+    # Variables para validación
+    mouse_pos = (0, 0)
+    all_boxes = list(input_boxes.values())
+
+    # Valores por defecto
+    defaults = {
+        'total': '50',
+        'infectados': '5',
+        'vacunados': '0',
+        'cuarentena': '0'
+    }
 
     running = True
-    total_poblacion = None
-    infectados_iniciales = None
 
     while running:
-        screen.fill(WHITE)
+        mouse_pos = pygame.mouse.get_pos()
 
-        # Etiquetas
-        txt1 = font.render("Población total:", True, BLACK)
-        txt2 = font.render("Infectados iniciales:", True, BLACK)
-        screen.blit(txt1, (50, 105))
-        screen.blit(txt2, (50, 185))
+        # Verificar hover en botones
+        start_hovered = button_rect.collidepoint(mouse_pos)
+        reset_hovered = reset_button_rect.collidepoint(mouse_pos)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
-            for box in input_boxes:
+            # Manejar eventos de input boxes
+            for box in all_boxes:
                 box.handle_event(event)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
+                # Botón iniciar simulación
                 if button_rect.collidepoint(event.pos):
-                    if input_total.text.isdigit() and input_infectados.text.isdigit():
-                        total_poblacion = int(input_total.text)
-                        infectados_iniciales = int(input_infectados.text)
+                    # Validar que todos los campos tengan valores válidos
+                    values = {}
+                    valid = True
+
+                    for key, box in input_boxes.items():
+                        if box.text and box.text.isdigit():
+                            values[key] = int(box.text)
+                        elif key in defaults:
+                            values[key] = int(defaults[key])
+                        else:
+                            valid = False
+                            break
+
+                    # Validar que el total sea mayor o igual a la suma de otros
+                    if valid:
+                        total_others = values['infectados'] + values['vacunados'] + values['cuarentena']
+                        if values['total'] < total_others:
+                            valid = False
+
+                    if valid:
+                        # Iniciar simulación
+                        covid = Simulation()
+                        covid.n_susceptible = values['total'] - total_others
+                        covid.n_infected = values['infectados']
+                        covid.n_vaccinated = values['vacunados']
+                        covid.n_quarantined = values['cuarentena']
                         running = False
+                        covid.start(randomize=True)
+
+                # Botón reset
+                elif reset_button_rect.collidepoint(event.pos):
+                    for key, box in input_boxes.items():
+                        box.text = defaults[key]
+                        box.txt_surface = box.font.render(box.text, True, BLACK)
+
+        # Dibujar interfaz
+        screen.fill(BACKGROUND_COLOR)
+
+        # Header con gradiente
+        header_rect = pygame.Rect(0, 0, WINDOW_WIDTH, 100)
+        draw_gradient_rect(screen, HEADER_COLOR, (50, 100, 150), header_rect)
+
+        # Título
+        title_text = title_font.render("Simulador de Pandemia", True, WHITE)
+        title_rect = title_text.get_rect(center=(WINDOW_WIDTH // 2, 40))
+        screen.blit(title_text, title_rect)
+
+        subtitle_text = font.render("Configura los parámetros iniciales de la simulación", True, WHITE)
+        subtitle_rect = subtitle_text.get_rect(center=(WINDOW_WIDTH // 2, 70))
+        screen.blit(subtitle_text, subtitle_rect)
+
+        # Sección de configuración
+        config_rect = pygame.Rect(50, 120, WINDOW_WIDTH - 100, 320)
+        pygame.draw.rect(screen, SECTION_COLOR, config_rect, border_radius=10)
+        pygame.draw.rect(screen, (200, 200, 200), config_rect, 2, border_radius=10)
+
+        # Título de sección
+        section_title = font.render("Parámetros de Población", True, DARK_GREY)
+        screen.blit(section_title, (70, 140))
+
+        # Labels con iconos y descripciones
+        labels = [
+            ("Población Total:", "Número total de individuos en la simulación", 'total'),
+            ("Infectados Iniciales:", "Personas infectadas al comenzar", 'infectados'),
+            ("Vacunados Iniciales:", "Personas ya vacunadas al inicio", 'vacunados'),
+            ("En Cuarentena:", "Personas en cuarentena (sin movimiento)", 'cuarentena')
+        ]
+
+        y_positions = [180, 240, 300, 360]
+
+        for i, (label, description, key) in enumerate(labels):
+            y = y_positions[i]
+
+            # Label principal
+            label_text = label_font.render(label, True, DARK_GREY)
+            screen.blit(label_text, (80, y + 5))
+
+            # Descripción pequeña
+            desc_font = pygame.font.SysFont("Arial", 14)
+            desc_text = desc_font.render(description, True, (120, 120, 120))
+            screen.blit(desc_text, (80, y + 25))
 
         # Dibujar input boxes
-        for box in input_boxes:
+        for box in all_boxes:
             box.draw(screen)
 
-        # Dibujar botón
-        pygame.draw.rect(screen, (100, 200, 100), button_rect)
-        btn_txt = font.render("Iniciar simulación", True, WHITE)
-        screen.blit(btn_txt, (button_rect.x + 15, button_rect.y + 10))
+        # Validación visual
+        total_val = int(input_boxes['total'].text) if input_boxes['total'].text.isdigit() else 0
+        others_sum = sum(int(input_boxes[key].text) if input_boxes[key].text.isdigit() else 0
+                         for key in ['infectados', 'vacunados', 'cuarentena'])
+
+        if total_val > 0 and others_sum > total_val:
+            error_text = font.render(
+                "Error: La suma de infectados, vacunados y cuarentena no puede exceder el total", True,
+                (220, 20, 60))
+            screen.blit(error_text, (80, 410))
+        elif total_val > 0:
+            susceptible = total_val - others_sum
+            info_text = label_font.render(f"Susceptibles resultantes: {susceptible}", True, (34, 139, 34))
+            screen.blit(info_text, (80, 410))
+
+        # Instrucciones
+        instructions = [
+            "• Ingresa valores numéricos en cada campo",
+            "• La población total debe ser mayor a la suma de los demás valores",
+            "• Los campos vacíos usarán valores por defecto"
+        ]
+
+        inst_y = 520
+        for instruction in instructions:
+            inst_font = pygame.font.SysFont("Arial", 16)
+            inst_text = inst_font.render(instruction, True, (100, 100, 100))
+            screen.blit(inst_text, (80, inst_y))
+            inst_y += 20
+
+        # Botones
+        can_start = total_val >= others_sum and total_val > 0
+        start_color = (34, 139, 34) if can_start else (150, 150, 150)
+        start_hover_color = (50, 205, 50) if can_start else (170, 170, 170)
+
+        draw_button(screen, button_rect, "Iniciar Simulación", font,
+                    start_color, start_hover_color, start_hovered and can_start)
+
+        draw_button(screen, reset_button_rect, "Reset", font,
+                    (70, 130, 180), (100, 149, 237), reset_hovered)
 
         pygame.display.flip()
 
-    # 🚀 Ya tenemos los valores
-    covid = Simulation()
-    covid.n_infected = infectados_iniciales
-    covid.n_susceptible = total_poblacion - infectados_iniciales
-    covid.n_quarantined = 0
-    covid.start(randomize=True)
+    pygame.quit()
