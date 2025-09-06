@@ -211,6 +211,7 @@ class Simulation:
 
         # Parámetros de enfermedad
         self.T = 1000
+        self.max_days = 100  # Duración máxima en días
         self.transmission_rate = 0.7
         self.incubation_period = 50
         self.recovery_period_min = 150
@@ -315,7 +316,7 @@ class Simulation:
                     pygame.quit()
                     sys.exit()
 
-            if i < self.T:
+            if i < self.T and self.current_day < self.max_days:
 
                 self.all_container.update()
                 screen.fill(BACKGROUND)
@@ -341,6 +342,45 @@ class Simulation:
                 n_vac_now = len(self.vaccinated_container)
                 n_dead_now = self.N - n_pop_now
                 n_sus_now = len(self.susceptible_container)
+                # Verificar si no quedan infectados activos
+                if n_inf_now == 0 and i > 0:
+                    print(f"\n🎉 Simulación terminada - No quedan infectados activos")
+                    print(f"📊 Estadísticas finales:")
+                    print(f"   • Días transcurridos: {self.current_day}")
+                    print(f"   • Recuperados: {n_rec_now}")
+                    print(f"   • Vacunados: {n_vac_now}")
+                    print(f"   • Fallecidos: {n_dead_now}")
+                    print(f"   • Susceptibles restantes: {n_sus_now}")
+
+                    # Mostrar mensaje en pantalla por unos segundos
+                    end_font = pygame.font.SysFont("Arial", 32, bold=True)
+                    end_text = end_font.render("¡Simulación Completada!", True, (0, 150, 0))
+                    end_rect = end_text.get_rect(center=(self.WIDTH // 2, self.HEIGHT // 2))
+
+                    # Fondo semi-transparente
+                    overlay = pygame.Surface((self.WIDTH, self.HEIGHT))
+                    overlay.set_alpha(180)
+                    overlay.fill((255, 255, 255))
+                    screen.blit(overlay, (0, 0))
+                    screen.blit(end_text, end_rect)
+
+                    # Mostrar estadísticas finales
+                    stats_font = pygame.font.SysFont("Arial", 20)
+                    final_stats = [
+                        f"Duración: {self.current_day} días",
+                        f"Recuperados: {n_rec_now}",
+                        f"Fallecidos: {n_dead_now}",
+                        f"Vacunados: {n_vac_now}"
+                    ]
+
+                    for j, stat in enumerate(final_stats):
+                        stat_text = stats_font.render(stat, True, BLACK)
+                        stat_rect = stat_text.get_rect(center=(self.WIDTH // 2, self.HEIGHT // 2 + 50 + j * 30))
+                        screen.blit(stat_text, stat_rect)
+
+                    pygame.display.flip()
+                    pygame.time.wait(10000)  # Esperar 10 segundos
+                    break
 
                 # Guardar historial
                 if i % self.cycles_per_day == 0:
@@ -548,15 +588,16 @@ if __name__ == "__main__":
 
     # Crear input boxes con placeholders
     input_boxes = {
-        'total': InputBox(400, 180, 180, 40, placeholder="Ej: 100"),
-        'infectados': InputBox(400, 240, 180, 40, placeholder="Ej: 5"),
-        'vacunados': InputBox(400, 300, 180, 40, placeholder="Ej: 10"),
-        'cuarentena': InputBox(400, 360, 180, 40, placeholder="Ej: 0")
+        'total': InputBox(400, 160, 180, 40, placeholder="Ej: 100"),
+        'infectados': InputBox(400, 210, 180, 40, placeholder="Ej: 5"),
+        'vacunados': InputBox(400, 260, 180, 40, placeholder="Ej: 10"),
+        'cuarentena': InputBox(400, 310, 180, 40, placeholder="Ej: 0"),
+        'duracion': InputBox(400, 360, 180, 40, placeholder="Ej: 100")
     }
 
     # Configuración del botón
-    button_rect = pygame.Rect(300, 460, 200, 50)
-    reset_button_rect = pygame.Rect(520, 460, 120, 50)
+    button_rect = pygame.Rect(225, 520, 200, 50)
+    reset_button_rect = pygame.Rect(450, 520, 120, 50)
 
     # Variables para validación
     mouse_pos = (0, 0)
@@ -567,7 +608,8 @@ if __name__ == "__main__":
         'total': '50',
         'infectados': '5',
         'vacunados': '0',
-        'cuarentena': '0'
+        'cuarentena': '0',
+        'duracion': '100'
     }
 
     running = True
@@ -617,6 +659,7 @@ if __name__ == "__main__":
                         covid.n_infected = values['infectados']
                         covid.n_vaccinated = values['vacunados']
                         covid.n_quarantined = values['cuarentena']
+                        covid.max_days = values['duracion']
                         running = False
                         covid.start(randomize=True)
 
@@ -656,10 +699,11 @@ if __name__ == "__main__":
             ("Población Total:", "Número total de individuos en la simulación", 'total'),
             ("Infectados Iniciales:", "Personas infectadas al comenzar", 'infectados'),
             ("Vacunados Iniciales:", "Personas ya vacunadas al inicio", 'vacunados'),
-            ("En Cuarentena:", "Personas en cuarentena (sin movimiento)", 'cuarentena')
+            ("En Cuarentena:", "Personas en cuarentena (sin movimiento)", 'cuarentena'),
+            ("Duración Máxima:", "Días máximos de simulación", 'duracion')
         ]
 
-        y_positions = [180, 240, 300, 360]
+        y_positions = [160, 210, 260, 310, 360]
 
         for i, (label, description, key) in enumerate(labels):
             y = y_positions[i]
@@ -699,7 +743,7 @@ if __name__ == "__main__":
             "• Los campos vacíos usarán valores por defecto"
         ]
 
-        inst_y = 520
+        inst_y = 450
         for instruction in instructions:
             inst_font = pygame.font.SysFont("Arial", 16)
             inst_text = inst_font.render(instruction, True, (100, 100, 100))
